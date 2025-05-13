@@ -2,7 +2,7 @@ import redis
 import random
 import time
 from multiprocessing import Pool
-from redis.exceptions import RedisError  # ✅ Importa excepciones correctamente
+from redis.exceptions import RedisError  #  Importa excepciones correctamente
 
 INSULTS = [
     "You are an idiot!", "You are a fool!", "You are stupid!",
@@ -16,7 +16,7 @@ class StressTestRedisProducer:
     def send_insult(self, i):
         """Envía insultos a Redis (una conexión por proceso)"""
         try:
-            r = redis.Redis(  # ✅ Usa redis.Redis en lugar de StrictRedis
+            r = redis.Redis(  #  Usa redis.Redis en lugar de StrictRedis
                 host='localhost',
                 port=6379,
                 db=0,
@@ -29,7 +29,7 @@ class StressTestRedisProducer:
             r.rpush(self.queue_name, insult)
             print(f"Produced: {insult}")
 
-        except RedisError as e:  # ✅ Usa la excepción importada
+        except RedisError as e:  #  Usa la excepción importada
             print(f"Error en el envío: {str(e)}")
 
     def stress_test(self, n_messages=1000, n_processes=20):
