@@ -1,45 +1,46 @@
 import time
 import Pyro4
+from multiprocessing import Pool, current_process
 
-# Conectar a varios servidores Pyro (supongamos que tienes 3 servidores ejecutándose)
-insult_service_1 = Pyro4.Proxy("PYRONAME:insult.service.1")
-insult_service_2 = Pyro4.Proxy("PYRONAME:insult.service.2")
-insult_service_3 = Pyro4.Proxy("PYRONAME:insult.service.3")
-
-insult_filter_1 = Pyro4.Proxy("PYRONAME:insult.filter.service.1")
-insult_filter_2 = Pyro4.Proxy("PYRONAME:insult.filter.service.2")
-insult_filter_3 = Pyro4.Proxy("PYRONAME:insult.filter.service.3")
-
-# Número de solicitudes
 NUM_REQUESTS = 1000
-TEXT = "You are such a moron"
+NUM_PROCESSES = 20
 
-# Medir tiempo para InsultService (distribuido en 3 nodos)
-start = time.time()
-for i in range(NUM_REQUESTS):
-    if i % 3 == 0:
-        insult_service_1.add_insult("dummy")
-    elif i % 3 == 1:
-        insult_service_2.add_insult("dummy")
-    else:
-        insult_service_3.add_insult("dummy")
-end = time.time()
-insult_service_duration = end - start
-insult_service_throughput = NUM_REQUESTS / insult_service_duration
+# Lista con los nombres de los servicios en el Name Server para los 3 nodos
+SERVICE_NAMES = ["insult.service.1", "insult.service.2", "insult.service.3"]
 
-# Medir tiempo para InsultFilterService (distribuido en 3 nodos)
-start = time.time()
-for i in range(NUM_REQUESTS):
-    if i % 3 == 0:
-        insult_filter_1.filter_text(TEXT)
-    elif i % 3 == 1:
-        insult_filter_2.filter_text(TEXT)
-    else:
-        insult_filter_3.filter_text(TEXT)
-end = time.time()
-insult_filter_duration = end - start
-insult_filter_throughput = NUM_REQUESTS / insult_filter_duration
+def send_insult(i):
+    insult = f"insult-{i}"
+    proc_name = current_process().name
 
-# Mostrar resultados
-print(f"InsultService 3 Nodes: Tiempo: {insult_service_duration:.2f}s, Throughput: {insult_service_throughput:.2f} req/s")
-print(f"InsultFilterService 3 Nodes: Tiempo: {insult_filter_duration:.2f}s, Throughput: {insult_filter_throughput:.2f} req/s")
+    # Elegir nodo usando round-robin según el índice i
+    service_name = SERVICE_NAMES[i % len(SERVICE_NAMES)]
+
+    try:
+        ns = Pyro4.locateNS()
+        uri = ns.lookup(service_name)
+        proxy = Pyro4.Proxy(uri)
+        proxy._pyroTimeout = 10  # Timeout para la llamada
+
+        t0 = time.perf_counter()
+        result = proxy.add_insult(insult)
+        t1 = time.perf_counter()
+
+        status = " añadido" if result else " ya existía"
+
+    except Exception as e:
+        print(f"[{proc_name}] Error enviando {insult} a {service_name}: {str(e)}")
+
+if __name__ == "__main__":
+    print(f"\n Iniciando stress test Pyro con {NUM_REQUESTS} peticiones y {NUM_PROCESSES} procesos en 3 nodos...\n")
+    start = time.perf_counter()
+
+    with Pool(NUM_PROCESSES) as pool:
+        pool.map(send_insult, range(NUM_REQUESTS))
+
+    duration = time.perf_counter() - start
+    throughput = NUM_REQUESTS / duration
+
+    print(f"\n Finalizado")
+    print(f"[PyRO - Concurrente 3 nodos] Mensajes enviados: {NUM_REQUESTS}")
+    print(f"[PyRO - Concurrente 3 nodos] Tiempo total: {duration:.2f}s")
+    print(f"[PyRO - Concurrente 3 nodos] Throughput: {throughput:.2f} req/s\n")

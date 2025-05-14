@@ -2,6 +2,7 @@ import random
 import time
 import threading
 import Pyro4
+import sys
 
 @Pyro4.expose
 @Pyro4.behavior(instance_mode="single")
@@ -59,20 +60,26 @@ class InsultService:
         self.subscribers = [uri for uri in self.subscribers if uri not in broken_subscribers]
 
 if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Uso: python pyro_server.py <nombre_servicio>")
+        sys.exit(1)
+
+    service_name = sys.argv[1]
+
     Pyro4.config.SERIALIZER = "serpent"
     Pyro4.config.SERVERTYPE = "multiplex"
     
     daemon = Pyro4.Daemon()
     ns = Pyro4.locateNS()
 
-    uri = daemon.register(InsultService)
-    ns.register("insult.service", uri)
+    uri = daemon.register(InsultService())
+    ns.register(service_name, uri)
 
-    print("PyRO InsultService running...")
+    print(f"PyRO InsultService '{service_name}' running...")
     print(f"Service URI: {uri}")
     print("Broadcasting insults every 5 seconds...")
     
     try:
         daemon.requestLoop()
     finally:
-        ns.remove("insult.service")
+        ns.remove(service_name)
