@@ -10,16 +10,13 @@ def send_insult(i):
     proc_name = current_process().name
     try:
         ns = Pyro4.locateNS()
-        uri = ns.lookup("insult.service")
+        uri = ns.lookup("insult.service.1")
         proxy = Pyro4.Proxy(uri)
         proxy._pyroTimeout = 10  # Tiempo máximo para cada llamada
 
         t0 = time.perf_counter()
         result = proxy.add_insult(insult)
         t1 = time.perf_counter()
-
-        status = " añadido" if result else " ya existía"
-        print(f"[{proc_name}] {insult} -> {status} ({t1 - t0:.3f}s)")
 
     except Exception as e:
         print(f"[{proc_name}]  Error enviando {insult}: {str(e)}")
