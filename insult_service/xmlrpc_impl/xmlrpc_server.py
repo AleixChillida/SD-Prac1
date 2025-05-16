@@ -1,47 +1,5 @@
-import xmlrpc.server
-import xmlrpc.client
-import random
-import time
-from threading import Thread
-import sys
-
-class InsultService:
-    def __init__(self):
-        self.insults = set()
-        self.subscribers = set()  # Usamos set para evitar duplicados
-        
-    def add_insult(self, insult):
-        if insult not in self.insults:
-            self.insults.add(insult)
-            return True
-        return False
-    
-    def get_insults(self):
-        return list(self.insults)
-    
-    def get_random_insult(self):
-        if not self.insults:
-            return ""
-        return random.choice(list(self.insults))
-    
-    def add_subscriber(self, callback_url):
-        if callback_url not in self.subscribers:
-            self.subscribers.add(callback_url)
-            return True
-        return False
-    
-    def start_broadcasting(self, interval=5):
-        def broadcast_loop():
-            while True:
-                if self.insults:
-                    insult = self.get_random_insult()
-                    self._notify_subscribers(insult)
-                time.sleep(interval)
-        
-        Thread(target=broadcast_loop, daemon=True).start()
-    
-    def _notify_subscribers(self, insult):
-        for url in list(self.subscribers):
+        """Notifica a los suscriptores"""
+        for url in list(self.subscribers):  # Usamos lista para evitar cambios durante iteración
             try:
                 proxy = xmlrpc.client.ServerProxy(url)
                 proxy.notify(insult)
@@ -49,17 +7,13 @@ class InsultService:
                 print(f"Error notifying {url}: {str(e)}")
                 self.subscribers.discard(url)
 
+# Configuración del servidor
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Uso: python xmlrpc_server.py <puerto>")
-        sys.exit(1)
-
-    port = int(sys.argv[1])
-    server = xmlrpc.server.SimpleXMLRPCServer(("localhost", port), allow_none=True)
+    server = xmlrpc.server.SimpleXMLRPCServer(("localhost", 8000), allow_none=True)
     service = InsultService()
-    service.start_broadcasting(interval=5)
+    service.start_broadcasting(interval=5)  # Broadcast cada 5 segundos
     
     server.register_instance(service)
-    print(f"XML-RPC InsultService running on port {port}...")
+    print("XML-RPC InsultService running on port 8000...")
     print("Broadcasting insults every 5 seconds to subscribers...")
     server.serve_forever()
