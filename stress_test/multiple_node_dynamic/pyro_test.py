@@ -59,24 +59,27 @@ def dynamic_pool():
         arrival_rate = current_block / avg_duration if avg_duration > 0 else 0
 
         # Calculamos workers necesarios (limitado)
-        workers_needed = math.ceil((arrival_rate * avg_duration) / capacity)
-        workers_needed = max(MIN_PROCESSES, min(MAX_PROCESSES, workers_needed))
+        workers_needed = max(MIN_PROCESSES, min(MAX_PROCESSES, math.ceil(arrival_rate / capacity)))
+        
+        # Si la duración media disminuye (procesamiento más rápido), reducimos los workers
+        if avg_duration < 0.02 and workers_needed > num_procs:
+            print(f"Duración media baja: aumentando trabajadores")
+        # Si la duración aumenta (cuello de botella), incrementamos workers
+        elif avg_duration > 0.05 and workers_needed < num_procs:
+            print(f"Duración media alta: disminuyendo trabajadores")
 
         print(f"Bloque terminado. Duración media por petición: {avg_duration:.4f}s")
         print(f"Estimación workers necesarios para siguiente bloque: {workers_needed}")
 
-        # Ajustamos número procesos para siguiente bloque
+        # Ajustamos número de procesos para siguiente bloque
         num_procs = workers_needed
 
     total_time = sum(durations)
     throughput = total_requests / total_time if total_time > 0 else 0
 
-    print(f"\nTest finalizado.")
     print(f"Total solicitudes: {total_requests}")
-    print(f"Tiempo estimado total (suma tiempos individuales): {total_time:.2f}s")
-    print(f"Throughput estimado: {throughput:.2f} req/s")
+    print(f"Tiempo total: {total_time:.2f}s")
+    print(f"Throughput: {throughput:.2f} req/s")
 
 if __name__ == "__main__":
-    print("Ejecutando pyro_test.py...")
-    dynamic_pool() 
-    print("Test terminado.")
+    dynamic_pool()

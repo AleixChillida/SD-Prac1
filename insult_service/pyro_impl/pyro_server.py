@@ -1,3 +1,57 @@
+import random
+import time
+import threading
+import Pyro4
+
+@Pyro4.expose
+@Pyro4.behavior(instance_mode="single")
+class InsultService:
+    def __init__(self):
+        self.insults = set()
+        self.subscribers = []  # Usamos lista en vez de set
+        self._start_broadcasting()
+
+    def add_insult(self, insult):
+        if insult not in self.insults:
+            self.insults.add(insult)
+            self._notify_subscribers(insult)
+            return True
+        return False
+
+    def get_insults(self):
+        return list(self.insults)
+
+    def get_random_insult(self):
+        if not self.insults:
+            return ""
+        return random.choice(list(self.insults))
+
+    def subscribe(self, subscriber_uri):
+        if subscriber_uri not in self.subscribers:
+            self.subscribers.append(subscriber_uri)  # Añadimos correctamente
+            print(f"New subscriber: {subscriber_uri}")
+            return True
+        return False
+
+    def _start_broadcasting(self, interval=5):
+        def broadcast_loop():
+            while True:
+                if self.insults and self.subscribers:
+                    insult = self.get_random_insult()
+                    self._notify_subscribers(insult)
+                time.sleep(interval)
+
+        thread = threading.Thread(target=broadcast_loop, daemon=True)
+        thread.start()
+
+    def _notify_subscribers(self, insult):
+        broken_subscribers = []
+        for uri in self.subscribers:
+            try:
+                subscriber = Pyro4.Proxy(uri)
+                subscriber.notify(insult)  # Llamada correcta
+                print(f"Notified: {uri}")
+            except Exception as e:
                 print(f"Notification failed for {uri}: {str(e)}")
                 broken_subscribers.append(uri)
 

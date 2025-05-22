@@ -1,21 +1,24 @@
+import xmlrpc.client
 import random
 import time
-import threading
-import Pyro4
+from threading import Thread
 import sys
+from xmlrpc.server import SimpleXMLRPCRequestHandler, SimpleXMLRPCServer
+from socketserver import ThreadingMixIn
 
-@Pyro4.expose
-@Pyro4.behavior(instance_mode="single")
+# Servidor concurrente
+class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
+    pass
+
 class InsultService:
     def __init__(self):
         self.insults = set()
-        self.subscribers = []  # Usamos lista en vez de set
-        self._start_broadcasting()
+        self.subscribers = set()
 
     def add_insult(self, insult):
+        print(f"Recibido: {insult}")
         if insult not in self.insults:
             self.insults.add(insult)
-            self._notify_subscribers(insult)
             return True
         return False
 
@@ -27,59 +30,40 @@ class InsultService:
             return ""
         return random.choice(list(self.insults))
 
-    def subscribe(self, subscriber_uri):
-        if subscriber_uri not in self.subscribers:
-            self.subscribers.append(subscriber_uri)  # Añadimos correctamente
-            print(f"New subscriber: {subscriber_uri}")
+    def add_subscriber(self, callback_url):
+        if callback_url not in self.subscribers:
+            self.subscribers.add(callback_url)
             return True
         return False
 
-    def _start_broadcasting(self, interval=5):
+    def start_broadcasting(self, interval=5):
         def broadcast_loop():
             while True:
-                if self.insults and self.subscribers:
+                if self.insults:
                     insult = self.get_random_insult()
                     self._notify_subscribers(insult)
                 time.sleep(interval)
-
-        thread = threading.Thread(target=broadcast_loop, daemon=True)
-        thread.start()
+        Thread(target=broadcast_loop, daemon=True).start()
 
     def _notify_subscribers(self, insult):
-        broken_subscribers = []
-        for uri in self.subscribers:
+        for url in list(self.subscribers):
             try:
-                subscriber = Pyro4.Proxy(uri)
-                subscriber.notify(insult)  # Llamada correcta
-                print(f"Notified: {uri}")
+                proxy = xmlrpc.client.ServerProxy(url)
+                proxy.notify(insult)
             except Exception as e:
-                print(f"Notification failed for {uri}: {str(e)}")
-                broken_subscribers.append(uri)
-
-        # Eliminamos los suscriptores que fallaron
-        self.subscribers = [uri for uri in self.subscribers if uri not in broken_subscribers]
+                print(f"Error notifying {url}: {str(e)}")
+                self.subscribers.discard(url)
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Uso: python pyro_server.py <nombre_servicio>")
+        print("Uso: python xmlrpc_server.py <puerto>")
         sys.exit(1)
 
-    service_name = sys.argv[1]
+    port = int(sys.argv[1])
+    server = ThreadedXMLRPCServer(("localhost", port), allow_none=True)
+    service = InsultService()
+    service.start_broadcasting(interval=5)
 
-    Pyro4.config.SERIALIZER = "serpent"
-    Pyro4.config.SERVERTYPE = "multiplex"
-
-    daemon = Pyro4.Daemon()
-    ns = Pyro4.locateNS()
-
-    uri = daemon.register(InsultService())
-    ns.register(service_name, uri)
-
-    print(f"PyRO InsultService '{service_name}' running...")
-    print(f"Service URI: {uri}")
-    print("Broadcasting insults every 5 seconds...")
-
-    try:
-        daemon.requestLoop()
-    finally:
-        ns.remove(service_name)
+    server.register_instance(service)
+    print(f"XML-RPC InsultService running on port {port}...")
+    server.serve_forever()
