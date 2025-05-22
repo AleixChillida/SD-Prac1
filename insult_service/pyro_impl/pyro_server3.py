@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
     Pyro4.config.SERIALIZER = "serpent"
     Pyro4.config.SERVERTYPE = "multiplex"
-    
+
     daemon = Pyro4.Daemon()
     ns = Pyro4.locateNS()
 
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     print(f"PyRO InsultService '{service_name}' running...")
     print(f"Service URI: {uri}")
     print("Broadcasting insults every 5 seconds...")
-    
+
     try:
         daemon.requestLoop()
     finally:
