@@ -1,19 +1,40 @@
-        """Notifica a los suscriptores"""
-        for url in list(self.subscribers):  # Usamos lista para evitar cambios durante iteración
-            try:
-                proxy = xmlrpc.client.ServerProxy(url)
-                proxy.notify(insult)
-            except Exception as e:
-                print(f"Error notifying {url}: {str(e)}")
-                self.subscribers.discard(url)
+import xmlrpc.server
+import xmlrpc.client
+import random
+from socketserver import ThreadingMixIn
+import sys
 
-# Configuración del servidor
+class InsultService:
+    def __init__(self):
+        self.insults = set()
+
+    def add_insult(self, insult):
+        if insult not in self.insults:
+            self.insults.add(insult)
+            return True
+        return False
+
+    def get_insults(self):
+        return list(self.insults)
+
+    def get_random_insult(self):
+        if not self.insults:
+            return ""
+        return random.choice(list(self.insults))
+
+# Servidor multihilo
+class ThreadedXMLRPCServer(ThreadingMixIn, xmlrpc.server.SimpleXMLRPCServer):
+    pass
+
 if __name__ == "__main__":
-    server = xmlrpc.server.SimpleXMLRPCServer(("localhost", 8000), allow_none=True)
+    if len(sys.argv) != 2:
+        print("Uso: python xmlrpc_threaded_server.py <puerto>")
+        sys.exit(1)
+
+    port = int(sys.argv[1])
+    server = ThreadedXMLRPCServer(("localhost", port), allow_none=True)
     service = InsultService()
-    service.start_broadcasting(interval=5)  # Broadcast cada 5 segundos
-    
     server.register_instance(service)
-    print("XML-RPC InsultService running on port 8000...")
-    print("Broadcasting insults every 5 seconds to subscribers...")
+
+    print(f"XML-RPC InsultService multihilo ejecutándose en el puerto {port}...")
     server.serve_forever()

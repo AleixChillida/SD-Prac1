@@ -1,19 +1,16 @@
+# insult_service_xmlrpc.py
 import xmlrpc.server
 import xmlrpc.client
 import random
 import time
 from threading import Thread
-import sys
 from socketserver import ThreadingMixIn
-
-# Servidor XML-RPC concurrente
-class ThreadedXMLRPCServer(ThreadingMixIn, xmlrpc.server.SimpleXMLRPCServer):
-    pass
+import sys
 
 class InsultService:
     def __init__(self):
         self.insults = set()
-        self.subscribers = set()  # Usamos set para evitar duplicados
+        self.subscribers = set()
 
     def add_insult(self, insult):
         if insult not in self.insults:
@@ -42,7 +39,6 @@ class InsultService:
                     insult = self.get_random_insult()
                     self._notify_subscribers(insult)
                 time.sleep(interval)
-
         Thread(target=broadcast_loop, daemon=True).start()
 
     def _notify_subscribers(self, insult):
@@ -50,21 +46,23 @@ class InsultService:
             try:
                 proxy = xmlrpc.client.ServerProxy(url)
                 proxy.notify(insult)
-            except Exception as e:
-                print(f"Error notifying {url}: {str(e)}")
+            except Exception:
                 self.subscribers.discard(url)
+
+# 🔧 Aquí creamos el servidor multithread
+class ThreadedXMLRPCServer(ThreadingMixIn, xmlrpc.server.SimpleXMLRPCServer):
+    pass
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Uso: python xmlrpc_server.py <puerto>")
+        print("Uso: python insult_service_xmlrpc.py <puerto>")
         sys.exit(1)
 
     port = int(sys.argv[1])
-    server = ThreadedXMLRPCServer(("localhost", port), allow_none=True)
+    server = ThreadedXMLRPCServer(("0.0.0.0", port), allow_none=True)
     service = InsultService()
-    service.start_broadcasting(interval=5)
-
+    service.start_broadcasting()
     server.register_instance(service)
-    print(f"XML-RPC InsultService running on port {port}...")
-    print("Broadcasting insults every 5 seconds to subscribers...")
+
+    print(f"Servidor XML-RPC escuchando en el puerto {port}...")
     server.serve_forever()
