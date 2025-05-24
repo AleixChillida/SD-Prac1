@@ -19,41 +19,48 @@ SERVICE_URIS_3_NODES = [
 
 def send_insult(i, service_uris):
     insult = f"insult-{i}"
-    proc_name = current_process().name
     service_uri = service_uris[i % len(service_uris)]
     try:
-        proxy = Pyro4.Proxy(service_uri)
-        proxy._pyroTimeout = 10
-        t0 = time.perf_counter()
-        proxy.add_insult(insult)
-        t1 = time.perf_counter()
-        return t1 - t0
+        with Pyro4.Proxy(service_uri) as proxy:
+            proxy._pyroTimeout = 10
+            proxy.add_insult(insult)
     except Exception as e:
-        print(f"[{proc_name}] Error enviando {insult} a {service_uri}: {e}")
-        return 10.0
+        print(f"[{current_process().name}] Error enviando {insult} a {service_uri}: {e}")
 
 def single_node_test():
     print("Iniciando test con un solo nodo...")
+    t0 = time.perf_counter()
     with Pool(NUM_PROCESSES) as pool:
-        durations = pool.starmap(send_insult, [(i, SERVICE_URIS_1_NODE) for i in range(NUM_REQUESTS)])
-    total_time = sum(durations)
-    throughput = NUM_REQUESTS / total_time
-    print(f"[Pyro - 1 nodo] Tiempo total: {total_time:.2f}s | Throughput: {throughput:.2f} req/s\n")
-    return total_time
+        pool.starmap(send_insult, [(i, SERVICE_URIS_1_NODE) for i in range(NUM_REQUESTS)])
+    t1 = time.perf_counter()
+
+    real_time = t1 - t0
+    throughput = NUM_REQUESTS / real_time
+
+    print(f"[Pyro - 1 nodo] Tiempo REAL de ejecución: {real_time:.2f}s")
+    print(f"[Pyro - 1 nodo] Throughput REAL: {throughput:.2f} req/s\n")
+    return real_time
 
 def static_scaling_test(service_uris):
     print(f"[Pyro - {len(service_uris)} nodos] Ejecutando stress test...")
+    t0 = time.perf_counter()
     with Pool(NUM_PROCESSES) as pool:
-        durations = pool.starmap(send_insult, [(i, service_uris) for i in range(NUM_REQUESTS)])
-    total_time = sum(durations)
-    throughput = NUM_REQUESTS / total_time
-    print(f"[Pyro - {len(service_uris)} nodos] Tiempo total: {total_time:.2f}s | Throughput: {throughput:.2f} req/s\n")
-    return total_time
+        pool.starmap(send_insult, [(i, service_uris) for i in range(NUM_REQUESTS)])
+    t1 = time.perf_counter()
+
+    real_time = t1 - t0
+    throughput = NUM_REQUESTS / real_time
+
+    print(f"[Pyro - {len(service_uris)} nodos] Tiempo REAL de ejecución: {real_time:.2f}s")
+    print(f"[Pyro - {len(service_uris)} nodos] Throughput REAL: {throughput:.2f} req/s\n")
+    return real_time
 
 def compare_static_scaling():
     t1 = static_scaling_test(SERVICE_URIS_1_NODE)
     t2 = static_scaling_test(SERVICE_URIS_2_NODES)
     t3 = static_scaling_test(SERVICE_URIS_3_NODES)
+
+    print("Speedups (con tiempo REAL):")
     print(f"Speedup con 1 nodo (base): 1.00")
     print(f"Speedup con 2 nodos: {t1 / t2:.2f}")
     print(f"Speedup con 3 nodos: {t1 / t3:.2f}\n")
@@ -63,26 +70,31 @@ def dynamic_scaling(service_uris):
     total_requests = NUM_REQUESTS
     processed = 0
     num_procs = 2
-    durations = []
+
+    t0_total = time.perf_counter()
 
     while processed < total_requests:
         current_block = min(BLOCK_SIZE, total_requests - processed)
+        t0_block = time.perf_counter()
         with Pool(num_procs) as pool:
-            block_durations = pool.starmap(send_insult, [(i, service_uris) for i in range(processed, processed + current_block)])
-        durations.extend(block_durations)
-        processed += current_block
+            pool.starmap(send_insult, [(i, service_uris) for i in range(processed, processed + current_block)])
+        t1_block = time.perf_counter()
 
-        avg = sum(block_durations) / len(block_durations)
-        throughput = current_block / avg
+        block_time = t1_block - t0_block
+        throughput = current_block / block_time
 
         if throughput < 50:
             num_procs = min(10, num_procs + 2)
         elif throughput > 100:
             num_procs = max(2, num_procs - 1)
+        processed += current_block
 
+    t1_total = time.perf_counter()
+    real_time = t1_total - t0_total
+    throughput_total = NUM_REQUESTS / real_time
 
-    total_time = sum(durations)
-    print(f"\n[Escalado dinámico] Tiempo total: {total_time:.2f}s | Throughput total: {NUM_REQUESTS / total_time:.2f} req/s\n")
+    print(f"\n[Escalado dinámico] Tiempo REAL de ejecución: {real_time:.2f}s")
+    print(f"[Escalado dinámico] Throughput REAL: {throughput_total:.2f} req/s\n")
 
 def main():
     single_node_test()
