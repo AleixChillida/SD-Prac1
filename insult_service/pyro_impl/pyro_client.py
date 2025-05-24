@@ -1,5 +1,5 @@
 import Pyro4
-d
+
 def main():
     ns = Pyro4.locateNS()
     uri = ns.lookup("insult.service")
