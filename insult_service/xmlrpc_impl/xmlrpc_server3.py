@@ -3,7 +3,7 @@ import xmlrpc.server
 import xmlrpc.client
 import random
 import time
-from threading import Thread, Lock
+from threading import Thread
 from socketserver import ThreadingMixIn
 import sys
 
@@ -11,20 +11,12 @@ class InsultService:
     def __init__(self):
         self.insults = set()
         self.subscribers = set()
-        self.lock = Lock()
-        self.processed_count = 0
 
     def add_insult(self, insult):
-        # Simula procesamiento (validación, DB, etc.)
-        time.sleep(0.005)  # 5 ms = 200 req/s máximo teórico por nodo
-
-        with self.lock:
-            self.processed_count += 1
-            if insult not in self.insults:
-                self.insults.add(insult)
-                print(f"[{time.strftime('%H:%M:%S')}] Agregado: {insult} (total: {len(self.insults)})")
-                return True
-            return False
+        if insult not in self.insults:
+            self.insults.add(insult)
+            return True
+        return False
 
     def get_insults(self):
         return list(self.insults)
@@ -57,10 +49,7 @@ class InsultService:
             except Exception:
                 self.subscribers.discard(url)
 
-    def get_processed_count(self):
-        return self.processed_count
-
-# Servidor multithread
+# 🔧 Aquí creamos el servidor multithread
 class ThreadedXMLRPCServer(ThreadingMixIn, xmlrpc.server.SimpleXMLRPCServer):
     pass
 
@@ -70,14 +59,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     port = int(sys.argv[1])
-    server = ThreadedXMLRPCServer(("0.0.0.0", port), allow_none=True, logRequests=False)
+    server = ThreadedXMLRPCServer(("0.0.0.0", port), allow_none=True)
     service = InsultService()
     service.start_broadcasting()
     server.register_instance(service)
 
     print(f"Servidor XML-RPC escuchando en el puerto {port}...")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print(f"\nServidor detenido. Peticiones procesadas: {service.get_processed_count()}")
-        sys.exit(0)
+    server.serve_forever()
