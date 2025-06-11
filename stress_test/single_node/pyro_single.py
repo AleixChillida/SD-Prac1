@@ -36,7 +36,6 @@ def main():
 
     print(f"Total requests: {total_requests}")
     print(f"Total time: {total_time:.2f} seconds")
-    print(f"Average time per process: {total_time:.2f} seconds")
     print(f"Requests per second (throughput): {throughput:.2f} req/s")
 
 if __name__ == "__main__":
