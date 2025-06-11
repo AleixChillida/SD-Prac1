@@ -39,7 +39,7 @@ def wait_until_queue_empty():
 
 
 def main():
-    n_processes = 8
+    n_processes = 32
     requests_per_process = 100
     total_requests = n_processes * requests_per_process
 
