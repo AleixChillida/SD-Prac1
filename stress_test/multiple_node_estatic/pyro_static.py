@@ -4,8 +4,8 @@ import Pyro4
 from collections import Counter
 
 # Aumentamos la carga para ver efectos reales al escalar
-NUM_PROCESSES = 32
-REQUESTS_PER_PROCESS = 100
+NUM_PROCESSES = 16
+REQUESTS_PER_PROCESS = 5000
 
 # Lista de nombres registrados en el NameServer
 ALL_SERVICE_NAMES = [
