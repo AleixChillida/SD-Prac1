@@ -68,7 +68,7 @@ def wait_until_queue_empty():
 def run_stress_test(n_nodes):
     print(f"\n--- Running stress test with {n_nodes} node(s) ---")
 
-    purge_queue()  # 💥 Limpia la cola antes de cada test
+    purge_queue()  # Limpia la cola antes de cada test
 
     # Lanzar consumidores
     consumers = []
