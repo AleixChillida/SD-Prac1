@@ -33,8 +33,8 @@ def wait_until_queue_empty():
 
 
 def main():
-    n_processes = 32
-    requests_per_process = 100
+    n_processes = 16
+    requests_per_process = 5000
     total_requests = n_processes * requests_per_process
 
     print(f"Starting Redis stress test with {n_processes} processes, {requests_per_process} requests each...")
