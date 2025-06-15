@@ -1,41 +1,55 @@
 import pika
 import random
 import time
-from multiprocessing import Process
-import os
+import multiprocessing
+from collections import Counter
+
+RABBITMQ_HOST = 'localhost'
+QUEUE_NAME = 'insult_queue'
+
+NUM_PROCESSES = 16
+REQUESTS_PER_PROCESS = 5000
+TOTAL_REQUESTS = NUM_PROCESSES * REQUESTS_PER_PROCESS
 
 INSULTS = [
     "You are an idiot!", "You are a fool!", "You are stupid!",
     "You are a clown!", "You are a moron!"
 ]
 
-RABBITMQ_HOST = 'localhost'
-QUEUE_NAME = 'insult_queue'
-
-
-def stress_producer(n_requests):
+def purge_queue():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
-    channel.queue_declare(queue=QUEUE_NAME, durable=True)
-    for _ in range(n_requests):
-        insult = random.choice(INSULTS)
-        channel.basic_publish(exchange='', routing_key=QUEUE_NAME, body=insult)
+    channel.queue_purge(queue=QUEUE_NAME)
     connection.close()
+    print(f"[Queue] '{QUEUE_NAME}' purged before starting test.")
 
+def stress_producer(proc_id, n_requests, return_dict):
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
+        channel = connection.channel()
+        channel.queue_declare(queue=QUEUE_NAME)
 
-def rabbitmq_consumer():
+        for _ in range(n_requests):
+            insult = f"{random.choice(INSULTS)} [{proc_id}]"
+            channel.basic_publish(exchange='', routing_key=QUEUE_NAME, body=insult)
+
+        connection.close()
+        return_dict[proc_id] = n_requests
+    except Exception as e:
+        print(f"[Producer {proc_id}] ERROR: {e}")
+        return_dict[proc_id] = 0
+
+def consumer_worker():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
-    channel.queue_declare(queue=QUEUE_NAME, durable=True)
+    channel.queue_declare(queue=QUEUE_NAME)
 
     def callback(ch, method, properties, body):
-        _ = body.decode()
-        # Simula trabajo opcional (descomenta si quieres ralentizar artificialmente)
-        # time.sleep(0.0001)
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
-    channel.basic_consume(queue=QUEUE_NAME, on_message_callback=callback, auto_ack=True)
+    channel.basic_qos(prefetch_count=1)
+    channel.basic_consume(queue=QUEUE_NAME, on_message_callback=callback)
     channel.start_consuming()
-
 
 def get_queue_message_count():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
@@ -45,63 +59,76 @@ def get_queue_message_count():
     connection.close()
     return message_count
 
-
 def wait_until_queue_empty():
     while True:
-        count = get_queue_message_count()
-        if count == 0:
+        if get_queue_message_count() == 0:
             break
         time.sleep(0.05)
 
+def run_stress_test(n_nodes):
+    print(f"\n--- Running stress test with {n_nodes} node(s) ---")
 
-def run_test(n_consumers):
-    n_processes = 16
-    requests_per_process = 10000
-    total_requests = n_processes * requests_per_process
-
-    print(f"\n[TEST] Multinode RabbitMQ with {n_consumers} consumers")
-    print(f"Producing {total_requests} messages with {n_processes} processes...")
+    purge_queue()  # 💥 Limpia la cola antes de cada test
+    purge_queue()  # Limpia la cola antes de cada test
 
     # Lanzar consumidores
     consumers = []
-    for _ in range(n_consumers):
-        c = Process(target=rabbitmq_consumer)
-        c.start()
-        consumers.append(c)
+    for _ in range(n_nodes):
+        p = multiprocessing.Process(target=consumer_worker)
+        p.start()
+        consumers.append(p)
 
-    time.sleep(2)  # Espera para que los consumidores se conecten
+    time.sleep(2)  # Esperar a que los consumidores arranquen
 
     start_time = time.time()
 
     # Lanzar productores
+    manager = multiprocessing.Manager()
+    return_dict = manager.dict()
     producers = []
-    for _ in range(n_processes):
-        p = Process(target=stress_producer, args=(requests_per_process,))
+
+    for i in range(NUM_PROCESSES):
+        p = multiprocessing.Process(target=stress_producer, args=(i, REQUESTS_PER_PROCESS, return_dict))
         p.start()
         producers.append(p)
 
     for p in producers:
         p.join()
 
-    # Esperar a que la cola esté vacía
     wait_until_queue_empty()
-
     end_time = time.time()
     total_time = end_time - start_time
-    throughput = total_requests / total_time
+    throughput = TOTAL_REQUESTS / total_time
 
-    print("\n--- RabbitMQ Multinode Stress Test Results ---")
-    print(f"Consumers: {n_consumers}")
-    print(f"Total requests: {total_requests}")
-    print(f"Total time: {total_time:.2f} seconds")
-    print(f"Throughput: {throughput:.2f} req/s")
-
-    # Terminar consumidores
+    # Detener consumidores
     for c in consumers:
         c.terminate()
-        c.join()
 
+    usage = Counter(return_dict.values())
+
+    print(f"\n[Result] Total requests: {TOTAL_REQUESTS}")
+    print(f"[Result] Total time: {total_time:.2f} seconds")
+    print(f"[Result] Throughput: {throughput:.2f} req/s")
+
+    return total_time
+
+def main():
+    print("RABBITMQ MULTI-NODE STATIC STRESS TEST")
+
+    times = {}
+    for n in [1, 2, 3]:
+        time_taken = run_stress_test(n)
+        if time_taken:
+            times[n] = time_taken
+        else:
+            print(f"[Error] Test failed for {n} nodes")
+            return
+
+    print("\n===== SPEEDUP ANALYSIS =====")
+    t1 = times[1]
+    for n in [2, 3]:
+        speedup = t1 / times[n]
+        print(f"[Speedup] {n} node(s): {speedup:.2f}x (T1 = {t1:.2f}s, T{n} = {times[n]:.2f}s)")
 
 if __name__ == "__main__":
-    run_test(2)  # Test con 2 nodos
-    run_test(3)  # Test con 3 nodos
+    main()
