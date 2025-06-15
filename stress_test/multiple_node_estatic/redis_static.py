@@ -7,7 +7,7 @@ from collections import Counter
 # Configuración
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
-QUEUE_NAME = 'insult_queue'
+QUEUE_BASE = 'insult_queue'
 
 NUM_PROCESSES = 16
 REQUESTS_PER_PROCESS = 5000
@@ -18,52 +18,58 @@ INSULTS = [
     "Más tonto que un ladrillo", "Tienes menos luces que un sótano"
 ]
 
-def purge_queue():
-    r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    r.delete(QUEUE_NAME)
-    print(f"[Queue] Redis list '{QUEUE_NAME}' purged.")
+def get_queue_name(index):
+    return f"{QUEUE_BASE}_{index}"
 
-def stress_producer(proc_id, n_requests, return_dict):
+def purge_queues(n_queues):
+    r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    for i in range(n_queues):
+        r.delete(get_queue_name(i))
+    print(f"[Queue] Redis queues 'insult_queue_0' to 'insult_queue_{n_queues - 1}' purged.")
+
+def stress_producer(proc_id, n_requests, n_queues, return_dict):
     try:
         r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-        for _ in range(n_requests):
-            insult = f"{random.choice(INSULTS)} [{proc_id}]"
-            r.rpush(QUEUE_NAME, insult)
+        for i in range(n_requests):
+            insult = f"{random.choice(INSULTS)} [{proc_id}-{i}]"
+            queue_name = get_queue_name(i % n_queues)
+            r.rpush(queue_name, insult)
         return_dict[proc_id] = n_requests
     except Exception as e:
         print(f"[Producer {proc_id}] ERROR: {e}")
         return_dict[proc_id] = 0
 
-def redis_consumer_worker():
+def redis_consumer_worker(queue_index):
     r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    queue_name = get_queue_name(queue_index)
     while True:
-        msg = r.lpop(QUEUE_NAME)
+        msg = r.lpop(queue_name)
         if msg is None:
             time.sleep(0.05)
         else:
             pass  # Simula procesamiento
 
-def get_queue_length():
+def get_total_queue_length(n_queues):
     r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    return r.llen(QUEUE_NAME)
+    return sum(r.llen(get_queue_name(i)) for i in range(n_queues))
 
-def wait_until_queue_empty():
-    while get_queue_length() > 0:
+def wait_until_queues_empty(n_queues):
+    while get_total_queue_length(n_queues) > 0:
         time.sleep(0.05)
 
 def run_stress_test(n_nodes):
     print(f"\n--- Running Redis stress test with {n_nodes} node(s) ---")
 
-    purge_queue()  # Limpia antes de empezar
+    purge_queues(n_nodes)
 
-    # Lanzar consumidores
+    # Lanzar consumidores (uno por nodo/cola)
     consumers = []
-    for _ in range(n_nodes):
-        p = multiprocessing.Process(target=redis_consumer_worker)
+    for i in range(n_nodes):
+        p = multiprocessing.Process(target=redis_consumer_worker, args=(i,))
         p.start()
         consumers.append(p)
 
-    time.sleep(2)
+    time.sleep(1)  # Asegura que los consumidores estén listos
 
     # Lanzar productores
     manager = multiprocessing.Manager()
@@ -73,14 +79,17 @@ def run_stress_test(n_nodes):
     start_time = time.time()
 
     for i in range(NUM_PROCESSES):
-        p = multiprocessing.Process(target=stress_producer, args=(i, REQUESTS_PER_PROCESS, return_dict))
+        p = multiprocessing.Process(
+            target=stress_producer,
+            args=(i, REQUESTS_PER_PROCESS, n_nodes, return_dict)
+        )
         p.start()
         producers.append(p)
 
     for p in producers:
         p.join()
 
-    wait_until_queue_empty()
+    wait_until_queues_empty(n_nodes)
     end_time = time.time()
 
     for c in consumers:

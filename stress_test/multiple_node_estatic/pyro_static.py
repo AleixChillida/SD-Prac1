@@ -3,11 +3,11 @@ import multiprocessing
 import Pyro4
 from collections import Counter
 
-# Aumentamos la carga para ver efectos reales al escalar
+# Carga total de prueba
 NUM_PROCESSES = 16
 REQUESTS_PER_PROCESS = 5000
 
-# Lista de nombres registrados en el NameServer
+# Lista de servicios registrados en el NameServer
 ALL_SERVICE_NAMES = [
     "insult.service.1",
     "insult.service.2",
@@ -35,7 +35,6 @@ def run_stress_test(num_nodes):
 
     ns = Pyro4.locateNS()
     service_names = ALL_SERVICE_NAMES[:num_nodes]
-
     uris = [str(ns.lookup(name)) for name in service_names]
 
     start_time = time.time()
@@ -45,8 +44,8 @@ def run_stress_test(num_nodes):
     processes = []
 
     for i in range(NUM_PROCESSES):
-        # Asigna bloque de procesos por nodo, no round-robin disperso
-        uri = uris[i * len(uris) // NUM_PROCESSES]
+        # ✅ Distribución round-robin de procesos entre los URIs
+        uri = uris[i % len(uris)]
         p = multiprocessing.Process(target=stress_test_process, args=(i, uri, return_dict))
         p.start()
         processes.append(p)
@@ -56,11 +55,10 @@ def run_stress_test(num_nodes):
 
     end_time = time.time()
     total_time = end_time - start_time
-
     total_requests = NUM_PROCESSES * REQUESTS_PER_PROCESS
     throughput = total_requests / total_time
 
-    # 🧠 Métricas por nodo
+    # Métricas por nodo
     usage = Counter()
     for _, (uri, count) in return_dict.items():
         usage[uri] += count
@@ -68,6 +66,10 @@ def run_stress_test(num_nodes):
     print(f"\n[Result] Total requests: {total_requests}")
     print(f"[Result] Total time: {total_time:.2f} seconds")
     print(f"[Result] Throughput: {throughput:.2f} req/s")
+
+    print("\n[Node Usage]")
+    for uri, count in usage.items():
+        print(f"{uri} handled {count} requests")
 
     return total_time
 
