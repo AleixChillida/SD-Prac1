@@ -14,7 +14,7 @@ QUEUE_NAME = 'insult_queue'
 def stress_producer(n_requests):
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
-    channel.queue_declare(queue=QUEUE_NAME)
+    channel.queue_declare(queue=QUEUE_NAME, durable=True)
     for _ in range(n_requests):
         insult = random.choice(INSULTS)
         channel.basic_publish(exchange='', routing_key=QUEUE_NAME, body=insult)
@@ -40,7 +40,7 @@ def wait_until_queue_empty():
 
 def main():
     n_processes = 16
-    requests_per_process = 5000
+    requests_per_process = 10000
     total_requests = n_processes * requests_per_process
 
     print(f"Starting RabbitMQ stress test with {n_processes} processes, {requests_per_process} requests each...")

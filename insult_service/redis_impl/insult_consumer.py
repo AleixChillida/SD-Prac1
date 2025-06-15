@@ -66,14 +66,10 @@ class InsultConsumer:
                         continue
                         
                     _, insult = result
-                    print(f" Recibido: {insult}")
                     
                     # Verificar si el insulto es nuevo
                     if self._safe_lpos(insult) is None:
                         self.redis_client.rpush(self.insults_list_name, insult)
-                        print(f" Añadido nuevo insulto: {insult}")
-                    else:
-                        print(f"⏭ Duplicado ignorado: {insult}")
                         
                 except (redis.RedisError, Exception) as e:
                     print(f" Error: {str(e)}")
@@ -82,6 +78,10 @@ class InsultConsumer:
         except KeyboardInterrupt:
             print("\n Consumer detenido por el usuario")
             sys.exit(0)
+
+def consumer_process():
+    consumer = InsultConsumer()
+    consumer.start_consuming()
 
 if __name__ == "__main__":
     print("Iniciando InsultConsumer...")

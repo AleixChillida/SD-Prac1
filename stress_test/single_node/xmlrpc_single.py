@@ -6,7 +6,7 @@ import string
 
 SERVER_URL = "http://localhost:8000"
 NUM_PROCESSES = 16
-REQUESTS_PER_PROCESS = 5000
+REQUESTS_PER_PROCESS = 100
 
 def random_insult():
     # Genera un insulto aleatorio

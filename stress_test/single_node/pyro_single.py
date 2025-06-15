@@ -3,7 +3,7 @@ import multiprocessing
 import Pyro4
 
 NUM_PROCESSES = 16
-REQUESTS_PER_PROCESS = 5000
+REQUESTS_PER_PROCESS = 10000
 
 def stress_test_process():
     ns = Pyro4.locateNS()
