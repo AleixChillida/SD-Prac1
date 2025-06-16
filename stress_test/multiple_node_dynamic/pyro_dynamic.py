@@ -3,92 +3,118 @@ import Pyro4
 import time
 import statistics
 
-# Configuración
-NUM_MESSAGES = 80000
-MONITOR_INTERVAL = 2  # segundos
-ALL_SERVICE_NAMES = ["insult.service.1", "insult.service.2", "insult.service.3"]
 
-# Generador de mensajes
-def message_generator(queue, num_messages):
-    for i in range(num_messages):
-        queue.append(f"You are a fool #{i}!")
+TOTAL_MESSAGES = 80000
+
+# Intervalo de tiempo (en segundos) para comprobar el estado de la cola
+MONITOR_INTERVAL_SECONDS = 1
+
+AVAILABLE_SERVICE_NAMES = ["insult.service.1", "insult.service.2", "insult.service.3"]
+
+# Genera mensajes y los coloca en la cola compartida
+def generate_messages(shared_queue, total_messages):
+    for i in range(total_messages):
+        shared_queue.append(f"You are a fool #{i}!")
     print("[Generator] Finished sending all messages.")
 
-# Worker Pyro que consume mensajes
-def pyro_worker(service_name, queue, processed_times):
+# Worker que procesa mensajes llamando al método remoto 'add_insult' del servicio Pyro
+def insult_worker(service_name, shared_queue, processing_times_list):
     try:
-        ns = Pyro4.locateNS(host="localhost", port=9090)
-        uri = str(ns.lookup(service_name))
-        proxy = Pyro4.Proxy(uri)
-    except Exception as e:
-        print(f"[{service_name}] ERROR localizando el NameServer: {e}")
+        # Conectar al NameServer de Pyro
+        name_server = Pyro4.locateNS(host="localhost", port=9090)
+        service_uri = str(name_server.lookup(service_name))
+        proxy = Pyro4.Proxy(service_uri)
+    except Exception as error:
+        print(f"[{service_name}] ERROR locating NameServer: {error}")
         return
 
     while True:
         try:
-            message = queue.pop(0)  # .popleft no funciona con ListProxy
+            # Obtener un mensaje de la cola compartida
+            message = shared_queue.pop(0)
         except IndexError:
+            # Si la cola está vacía, espera un poco y vuelve a intentar
             time.sleep(0.05)
             continue
 
         try:
-            t0 = time.time()
+            start = time.time()
             proxy.add_insult(message)
-            t1 = time.time()
-            processed_times.append(t1 - t0)
-        except Exception as e:
-            print(f"[{service_name}] ERROR procesando mensaje: {e}")
+            end = time.time()
+            processing_times_list.append(end - start)
+        except Exception as error:
+            print(f"[{service_name}] ERROR processing message: {error}")
 
-# Coordinador que ajusta dinámicamente el número de workers
-def dynamic_scaler():
-    queue = multiprocessing.Manager().list()
-    processed_times = multiprocessing.Manager().list()
-    processes = []
-    active_services = set()
+# Coordinador que escala dinámicamente el número de workers según la carga
+def dynamic_scaling_controller():
+    # Cola de mensajes compartida entre procesos
+    shared_queue = multiprocessing.Manager().list()
+    # Lista para registrar los tiempos individuales de procesamiento
+    processing_times_list = multiprocessing.Manager().list()
+    # Lista de procesos activos y conjunto de nombres en uso
+    active_processes = []
+    services_in_use = set()
 
+    # Lanzar el generador de mensajes
     start_time = time.time()
+    generator_process = multiprocessing.Process(
+        target=generate_messages,
+        args=(shared_queue, TOTAL_MESSAGES)
+    )
+    generator_process.start()
 
-    generator = multiprocessing.Process(target=message_generator, args=(queue, NUM_MESSAGES))
-    generator.start()
+    # Bucle de control dinámico hasta que se procesen todos los mensajes
+    while generator_process.is_alive() or len(shared_queue) > 0:
+        # Tasa de llegada estimada de mensajes
+        arrival_rate = len(shared_queue) / MONITOR_INTERVAL_SECONDS
 
-    while generator.is_alive() or len(queue) > 0:
-        # Cálculo de métricas
-        λ = len(queue) / MONITOR_INTERVAL
-        T = statistics.mean(processed_times) if processed_times else 0.02  # tiempo medio por mensaje
-        C = 1 / T if T > 0 else 1
-        N_required = max(1, round(λ / C))
+        # Tiempo medio de procesamiento por mensaje
+        avg_processing_time = statistics.mean(processing_times_list) if processing_times_list else 0.02
 
-        print(f"[Scaler] Queue: {len(queue)} | λ ≈ {λ:.2f} msg/s | T ≈ {T:.4f}s | N = {N_required}")
+        # Capacidad por worker: cuántos mensajes puede procesar por segundo
+        worker_capacity = 1 / avg_processing_time if avg_processing_time > 0 else 1
 
-        # Escalar hacia arriba si es necesario
-        if len(active_services) < N_required:
-            available = [s for s in ALL_SERVICE_NAMES if s not in active_services]
-            for service in available[:N_required - len(active_services)]:
-                print(f"[Scaler] Launching worker for {service}")
-                p = multiprocessing.Process(target=pyro_worker, args=(service, queue, processed_times))
-                p.start()
-                processes.append(p)
-                active_services.add(service)
+        # Número estimado de workers necesarios
+        required_workers = max(1, round(arrival_rate / worker_capacity))
 
-        time.sleep(MONITOR_INTERVAL)
+        print(f"Messages in queue: {len(shared_queue)} | "f"Estimated arrival rate: {arrival_rate:.2f} msg/s | "f"Average processing time message: {avg_processing_time:.4f} s | "f"Workers needed: {required_workers}")
 
-    # Espera a que se vacíe la cola completamente
-    while len(queue) > 0:
-        print(f"[Scaler] Aún quedan {len(queue)} mensajes por procesar...")
+
+        # Escalar si faltan workers
+        if len(services_in_use) < required_workers:
+            available_services = [
+                name for name in AVAILABLE_SERVICE_NAMES if name not in services_in_use
+            ]
+            for service_name in available_services[:required_workers - len(services_in_use)]:
+                print(f"[Scaler] Launching worker for {service_name}")
+                worker_process = multiprocessing.Process(
+                    target=insult_worker,
+                    args=(service_name, shared_queue, processing_times_list)
+                )
+                worker_process.start()
+                active_processes.append(worker_process)
+                services_in_use.add(service_name)
+
+        time.sleep(MONITOR_INTERVAL_SECONDS)
+
+    # Esperar hasta que la cola esté completamente vacía
+    while len(shared_queue) > 0:
+        print(f"[Scaler] Remaining messages: {len(shared_queue)}")
         time.sleep(1)
 
+    # Medición final de rendimiento
     end_time = time.time()
-    total_time = end_time - start_time
-    throughput = NUM_MESSAGES / total_time
+    total_duration = end_time - start_time
+    throughput = TOTAL_MESSAGES / total_duration
 
-    print(f"\n[RESULT] Total time: {total_time:.2f} s")
+    print(f"\n[RESULT] Total time: {total_duration:.2f} s")
     print(f"[RESULT] Throughput: {throughput:.2f} req/s")
 
-    # Finalizar workers
-    for p in processes:
-        p.terminate()
-        p.join()
+    # Finalizar procesos
+    for process in active_processes:
+        process.terminate()
+        process.join()
 
 if __name__ == "__main__":
     print("PYRO MULTI-NODE DYNAMIC SCALING TEST")
-    dynamic_scaler()
+    dynamic_scaling_controller()

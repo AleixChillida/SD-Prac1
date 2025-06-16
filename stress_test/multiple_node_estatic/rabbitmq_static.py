@@ -8,7 +8,7 @@ RABBITMQ_HOST = 'localhost'
 QUEUE_NAME = 'insult_queue'
 
 NUM_PROCESSES = 16
-REQUESTS_PER_PROCESS = 5000
+REQUESTS_PER_PROCESS = 100
 TOTAL_REQUESTS = NUM_PROCESSES * REQUESTS_PER_PROCESS
 
 INSULTS = [
@@ -16,7 +16,7 @@ INSULTS = [
     "You are a clown!", "You are a moron!"
 ]
 
-def purge_queue():
+def purge_queue():º
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
     channel.queue_purge(queue=QUEUE_NAME)

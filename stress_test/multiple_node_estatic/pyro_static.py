@@ -67,10 +67,6 @@ def run_stress_test(num_nodes):
     print(f"[Result] Total time: {total_time:.2f} seconds")
     print(f"[Result] Throughput: {throughput:.2f} req/s")
 
-    print("\n[Node Usage]")
-    for uri, count in usage.items():
-        print(f"{uri} handled {count} requests")
-
     return total_time
 
 def main():
