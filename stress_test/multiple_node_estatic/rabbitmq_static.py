@@ -9,7 +9,7 @@ RABBITMQ_HOST = 'localhost'
 QUEUE_NAME = 'insult_queue'
 
 NUM_PROCESSES = 16
-REQUESTS_PER_PROCESS = 100
+REQUESTS_PER_PROCESS = 5000
 TOTAL_REQUESTS = NUM_PROCESSES * REQUESTS_PER_PROCESS
 
 INSULTS = [
@@ -22,7 +22,6 @@ def purge_queue():
     channel = connection.channel()
     channel.queue_purge(queue=QUEUE_NAME)
     connection.close()
-    print(f"[Queue] '{QUEUE_NAME}' purged before starting test.")
 
 def stress_producer(proc_id, n_requests, return_dict):
     try:
