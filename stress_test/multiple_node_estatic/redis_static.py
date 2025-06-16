@@ -25,7 +25,6 @@ def purge_queues(n_queues):
     r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     for i in range(n_queues):
         r.delete(get_queue_name(i))
-    print(f"[Queue] Redis queues 'insult_queue_0' to 'insult_queue_{n_queues - 1}' purged.")
 
 def stress_producer(proc_id, n_requests, n_queues, return_dict):
     try:
@@ -39,15 +38,20 @@ def stress_producer(proc_id, n_requests, n_queues, return_dict):
         print(f"[Producer {proc_id}] ERROR: {e}")
         return_dict[proc_id] = 0
 
+# Worker que simula add_insult: almacena insultos únicos
 def redis_consumer_worker(queue_index):
     r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     queue_name = get_queue_name(queue_index)
+    stored_insults = set()
+
     while True:
         msg = r.lpop(queue_name)
         if msg is None:
             time.sleep(0.05)
         else:
-            pass  # Simula procesamiento
+            # Simula add_insult: almacenar solo si no está repetido
+            if msg not in stored_insults:
+                stored_insults.add(msg)
 
 def get_total_queue_length(n_queues):
     r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
@@ -69,7 +73,7 @@ def run_stress_test(n_nodes):
         p.start()
         consumers.append(p)
 
-    time.sleep(1)  # Asegura que los consumidores estén listos
+    time.sleep(1)  # Espera breve para que los consumidores estén listos
 
     # Lanzar productores
     manager = multiprocessing.Manager()

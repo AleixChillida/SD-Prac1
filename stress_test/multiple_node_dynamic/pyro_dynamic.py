@@ -15,7 +15,7 @@ AVAILABLE_SERVICE_NAMES = ["insult.service.1", "insult.service.2", "insult.servi
 def generate_messages(shared_queue, total_messages):
     for i in range(total_messages):
         shared_queue.append(f"You are a fool #{i}!")
-    print("[Generator] Finished sending all messages.")
+    print("Finished sending all messages.")
 
 # Worker que procesa mensajes llamando al método remoto 'add_insult' del servicio Pyro
 def insult_worker(service_name, shared_queue, processing_times_list):
@@ -86,7 +86,7 @@ def dynamic_scaling_controller():
                 name for name in AVAILABLE_SERVICE_NAMES if name not in services_in_use
             ]
             for service_name in available_services[:required_workers - len(services_in_use)]:
-                print(f"[Scaler] Launching worker for {service_name}")
+                print(f"Launching worker for {service_name}")
                 worker_process = multiprocessing.Process(
                     target=insult_worker,
                     args=(service_name, shared_queue, processing_times_list)
@@ -99,7 +99,7 @@ def dynamic_scaling_controller():
 
     # Esperar hasta que la cola esté completamente vacía
     while len(shared_queue) > 0:
-        print(f"[Scaler] Remaining messages: {len(shared_queue)}")
+        print(f"Remaining messages: {len(shared_queue)}")
         time.sleep(1)
 
     # Medición final de rendimiento

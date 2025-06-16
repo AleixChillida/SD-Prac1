@@ -4,6 +4,7 @@ import time
 import multiprocessing
 from collections import Counter
 
+# Configuración
 RABBITMQ_HOST = 'localhost'
 QUEUE_NAME = 'insult_queue'
 
@@ -16,7 +17,7 @@ INSULTS = [
     "You are a clown!", "You are a moron!"
 ]
 
-def purge_queue():º
+def purge_queue():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
     channel.queue_purge(queue=QUEUE_NAME)
@@ -44,7 +45,12 @@ def consumer_worker():
     channel = connection.channel()
     channel.queue_declare(queue=QUEUE_NAME)
 
+    stored_insults = set()  # Simulación de add_insult
+
     def callback(ch, method, properties, body):
+        insult = body.decode()
+        if insult not in stored_insults:
+            stored_insults.add(insult)
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
     channel.basic_qos(prefetch_count=1)
@@ -68,8 +74,7 @@ def wait_until_queue_empty():
 def run_stress_test(n_nodes):
     print(f"\n--- Running stress test with {n_nodes} node(s) ---")
 
-    purge_queue()  # 💥 Limpia la cola antes de cada test
-    purge_queue()  # Limpia la cola antes de cada test
+    purge_queue()
 
     # Lanzar consumidores
     consumers = []
