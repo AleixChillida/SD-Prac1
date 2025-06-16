@@ -1,70 +1,103 @@
 import time
 import redis
 import random
-from multiprocessing import Process, current_process
-from datetime import datetime
+import multiprocessing
 
-# Insultos de prueba
-INSULTS = [
-    "Eres un bobalicón",
-    "Vaya chapucero",
-    "Pedazo de zopenco",
-    "Más tonto que un ladrillo",
-    "Tienes menos luces que un sótano"
-]
-
-# Configuración de Redis
+# Configuración
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
-QUEUE_NAME = 'insult_queue'
+QUEUE_NAME = 'insult_queue_0'
 
+NUM_PROCESSES = 16
+REQUESTS_PER_PROCESS = 5000
+TOTAL_REQUESTS = NUM_PROCESSES * REQUESTS_PER_PROCESS
 
-def stress_producer(n_requests):
+INSULTS = [
+    "Eres un bobalicón", "Vaya chapucero", "Pedazo de zopenco",
+    "Más tonto que un ladrillo", "Tienes menos luces que un sótano"
+]
+
+def purge_queue():
     r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    for _ in range(n_requests):
-        insult = random.choice(INSULTS)
-        r.rpush(QUEUE_NAME, insult)
+    r.delete(QUEUE_NAME)
 
+def stress_producer(proc_id, n_requests, return_dict):
+    try:
+        r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+        for i in range(n_requests):
+            insult = f"{random.choice(INSULTS)} [{proc_id}-{i}]"
+            r.rpush(QUEUE_NAME, insult)
+        return_dict[proc_id] = n_requests
+    except Exception as e:
+        print(f"[Producer {proc_id}] ERROR: {e}")
+        return_dict[proc_id] = 0
+
+def redis_consumer_worker():
+    r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    stored_insults = set()
+
+    while True:
+        msg = r.lpop(QUEUE_NAME)
+        if msg is None:
+            time.sleep(0.05)
+        else:
+            if msg not in stored_insults:
+                stored_insults.add(msg)
+
+def get_queue_length():
+    r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    return r.llen(QUEUE_NAME)
 
 def wait_until_queue_empty():
-    r = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    while r.llen(QUEUE_NAME) > 0:
+    while get_queue_length() > 0:
         time.sleep(0.05)
 
+def run_stress_test():
+    print(f"\n--- Running Redis single-node stress test ---")
 
-def main():
-    n_processes = 16
-    requests_per_process = 10000
-    total_requests = n_processes * requests_per_process
+    purge_queue()
 
-    print(f"Starting Redis stress test with {n_processes} processes, {requests_per_process} requests each...")
+    # Lanzar un único consumidor
+    consumer = multiprocessing.Process(target=redis_consumer_worker)
+    consumer.start()
+
+    time.sleep(1)  # Espera breve para que el consumidor esté listo
+
+    # Lanzar productores
+    manager = multiprocessing.Manager()
+    return_dict = manager.dict()
+    producers = []
 
     start_time = time.time()
 
-    # Lanzar procesos
-    processes = []
-    for _ in range(n_processes):
-        p = Process(target=stress_producer, args=(requests_per_process,))
+    for i in range(NUM_PROCESSES):
+        p = multiprocessing.Process(
+            target=stress_producer,
+            args=(i, REQUESTS_PER_PROCESS, return_dict)
+        )
         p.start()
-        processes.append(p)
+        producers.append(p)
 
-    # Esperar a que todos terminen
-    for p in processes:
+    for p in producers:
         p.join()
 
-    # Esperar a que la cola se vacíe (el consumidor debe estar corriendo)
     wait_until_queue_empty()
-
     end_time = time.time()
 
+    consumer.terminate()
+
     total_time = end_time - start_time
-    throughput = total_requests / total_time
+    throughput = TOTAL_REQUESTS / total_time
 
-    print("\n--- Redis Stress Test Results ---")
-    print(f"Total requests: {total_requests}")
-    print(f"Total time: {total_time:.2f} seconds")
-    print(f"Requests per second (throughput): {throughput:.2f} req/s")
+    print(f"\n[Result] Total requests: {TOTAL_REQUESTS}")
+    print(f"[Result] Total time: {total_time:.2f} seconds")
+    print(f"[Result] Throughput: {throughput:.2f} req/s")
 
+    return total_time
+
+def main():
+    print("REDIS SINGLE-NODE STRESS TEST")
+    run_stress_test()
 
 if __name__ == "__main__":
     main()

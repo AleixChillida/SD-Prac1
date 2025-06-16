@@ -1,51 +1,61 @@
 import time
 import xmlrpc.client
-from multiprocessing import Process, Queue, cpu_count
+from multiprocessing import Process, Manager
 import random
 import string
 
-SERVER_URL = "http://localhost:8000"
+# Configuración
 NUM_PROCESSES = 16
 REQUESTS_PER_PROCESS = 100
+TOTAL_REQUESTS = NUM_PROCESSES * REQUESTS_PER_PROCESS
+
+# Solo un servidor para la prueba single-node
+SERVER_URL = "http://localhost:8001"
 
 def random_insult():
-    # Genera un insulto aleatorio
     return "You are a " + ''.join(random.choices(string.ascii_lowercase, k=8)) + "!"
 
-def worker(requests, q):
-    server = xmlrpc.client.ServerProxy(SERVER_URL)
-    start = time.time()
+def worker(proc_id, server_url, return_dict):
+    try:
+        server = xmlrpc.client.ServerProxy(server_url)
+        start = time.time()
+        for _ in range(REQUESTS_PER_PROCESS):
+            insult = random_insult()
+            server.add_insult(insult)
+        end = time.time()
+        return_dict[proc_id] = end - start
+    except Exception as e:
+        print(f"[Worker {proc_id}] ERROR: {e}")
+        return_dict[proc_id] = 0
 
-    for _ in range(requests):
-        insult = random_insult()
-        server.add_insult(insult)
+def run_single_node_test():
+    print("\n--- Running XML-RPC single-node stress test ---")
 
-    end = time.time()
-    q.put(end - start)
-
-def main():
-    print(f"Starting stress test with {NUM_PROCESSES} processes, "
-          f"{REQUESTS_PER_PROCESS} requests each...")
-
-    q = Queue()
+    manager = Manager()
+    return_dict = manager.dict()
     processes = []
 
     start_time = time.time()
 
-    for _ in range(NUM_PROCESSES):
-        p = Process(target=worker, args=(REQUESTS_PER_PROCESS, q))
-        processes.append(p)
+    for i in range(NUM_PROCESSES):
+        p = Process(target=worker, args=(i, SERVER_URL, return_dict))
         p.start()
+        processes.append(p)
 
     for p in processes:
         p.join()
 
-    total_time = time.time() - start_time
-    total_requests = NUM_PROCESSES * REQUESTS_PER_PROCESS
+    end_time = time.time()
+    total_duration = end_time - start_time
+    throughput = TOTAL_REQUESTS / total_duration
 
-    print(f"\nTotal requests: {total_requests}")
-    print(f"Total time: {total_time:.2f} seconds")
-    print(f"Requests per second (throughput): {total_requests / total_time:.2f} req/s")
+    print(f"\n[Result] Total requests: {TOTAL_REQUESTS}")
+    print(f"[Result] Total time: {total_duration:.2f} seconds")
+    print(f"[Result] Throughput: {throughput:.2f} req/s")
+
+def main():
+    print("===== XML-RPC SINGLE-NODE STRESS TEST =====")
+    run_single_node_test()
 
 if __name__ == "__main__":
     main()

@@ -2,26 +2,44 @@ import time
 import multiprocessing
 import Pyro4
 
+# Configuración
 NUM_PROCESSES = 16
-REQUESTS_PER_PROCESS = 10000
+REQUESTS_PER_PROCESS = 5000
+TOTAL_REQUESTS = NUM_PROCESSES * REQUESTS_PER_PROCESS
+SERVICE_NAME = "insult.service.1"  # Solo un nodo para single-node
 
-def stress_test_process():
+def stress_test_process(proc_id, uri, return_dict):
+    try:
+        proxy = Pyro4.Proxy(uri)
+        local_count = 0
+
+        for i in range(REQUESTS_PER_PROCESS):
+            insult = f"You are a fool #{proc_id}-{i}!"
+            proxy.add_insult(insult)
+            local_count += 1
+
+        return_dict[proc_id] = local_count
+
+    except Exception as e:
+        print(f"[Process {proc_id}] ERROR: {e}")
+        return_dict[proc_id] = 0
+
+def run_single_node_test():
+    print("\n--- Running Pyro single-node stress test ---")
+
+    # Obtener URI del servicio desde el NameServer
     ns = Pyro4.locateNS()
-    uri = ns.lookup("insult.service")
-    service = Pyro4.Proxy(uri)
+    uri = str(ns.lookup(SERVICE_NAME))
 
-    for i in range(REQUESTS_PER_PROCESS):
-        insult = f"You are a fool #{i}!"
-        service.add_insult(insult)
-
-def main():
-    print(f"Starting stress test with {NUM_PROCESSES} processes, {REQUESTS_PER_PROCESS} requests each...\n")
+    # Lanzar productores
+    manager = multiprocessing.Manager()
+    return_dict = manager.dict()
+    processes = []
 
     start_time = time.time()
 
-    processes = []
-    for _ in range(NUM_PROCESSES):
-        p = multiprocessing.Process(target=stress_test_process)
+    for i in range(NUM_PROCESSES):
+        p = multiprocessing.Process(target=stress_test_process, args=(i, uri, return_dict))
         p.start()
         processes.append(p)
 
@@ -30,13 +48,15 @@ def main():
 
     end_time = time.time()
     total_time = end_time - start_time
+    throughput = TOTAL_REQUESTS / total_time
 
-    total_requests = NUM_PROCESSES * REQUESTS_PER_PROCESS
-    throughput = total_requests / total_time
+    print(f"\n[Result] Total requests: {TOTAL_REQUESTS}")
+    print(f"[Result] Total time: {total_time:.2f} seconds")
+    print(f"[Result] Throughput: {throughput:.2f} req/s")
 
-    print(f"Total requests: {total_requests}")
-    print(f"Total time: {total_time:.2f} seconds")
-    print(f"Requests per second (throughput): {throughput:.2f} req/s")
+def main():
+    print("PYRO SINGLE-NODE STRESS TEST")
+    run_single_node_test()
 
 if __name__ == "__main__":
     main()
