@@ -27,7 +27,7 @@ def generate_messages(total_messages):
         channel.basic_publish(exchange='', routing_key=QUEUE_NAME, body=insult.encode())
 
     connection.close()
-    print("Finished inserting all messages into RabbitMQ.")
+    print(" Finished inserting all messages into RabbitMQ.")
 
 # Worker que simula add_insult y mide el tiempo de procesamiento
 def insult_worker(processing_times_list):

@@ -4,45 +4,44 @@ from multiprocessing import Process, Queue
 import random
 import string
 
-# Lista de URLs de servidores XML-RPC (múltiples nodos)
+# Lista de URLs de servidores XML-RPC (cada uno representa un nodo)
 SERVER_URLS = [
     "http://localhost:8001",  # Nodo 1
     "http://localhost:8002",  # Nodo 2
     "http://localhost:8003"   # Nodo 3
 ]
 
-NUM_PROCESSES = 16
-REQUESTS_PER_PROCESS = 100
+NUM_PROCESSES = 16                # Número total de procesos paralelos
+REQUESTS_PER_PROCESS = 100        # Peticiones por proceso
 
+# Genera un insulto aleatorio con letras minúsculas
 def random_insult():
-    # Genera un insulto aleatorio
     return "You are a " + ''.join(random.choices(string.ascii_lowercase, k=8)) + "!"
 
+# Función ejecutada por cada proceso: envía N peticiones a un servidor aleatorio
 def worker(requests, q, server_urls):
-    # Escoge un servidor de los disponibles de manera aleatoria o round-robin
-    server_url = random.choice(server_urls)
-    server = xmlrpc.client.ServerProxy(server_url)
+    server_url = random.choice(server_urls)                    # Selecciona un servidor
+    server = xmlrpc.client.ServerProxy(server_url)             # Proxy al servidor remoto
     start = time.time()
 
     for _ in range(requests):
         insult = random_insult()
-        server.add_insult(insult)
+        server.add_insult(insult)                              # Llamada RPC al método remoto
 
     end = time.time()
-    q.put(end - start)
+    q.put(end - start)                                         # Registra el tiempo que tardó
 
+# Ejecuta el test completo con el número de nodos indicado
 def run_stress_test(num_nodes):
-    # Limita los servidores según el número de nodos
-    service_urls = SERVER_URLS[:num_nodes]
+    service_urls = SERVER_URLS[:num_nodes]                    # Usa solo los N primeros nodos
 
     print(f"\n--- Running stress test with {num_nodes} node(s) ---")
 
     q = Queue()
     processes = []
-
     start_time = time.time()
 
-    # Crear procesos que van a hacer solicitudes distribuidas entre los servidores
+    # Lanza procesos que realizarán peticiones distribuidas entre los servidores
     for _ in range(NUM_PROCESSES):
         p = Process(target=worker, args=(REQUESTS_PER_PROCESS, q, service_urls))
         processes.append(p)
@@ -60,6 +59,7 @@ def run_stress_test(num_nodes):
 
     return total_time
 
+# Función principal que ejecuta el test con 1, 2 y 3 nodos y calcula speedups
 def main():
     print("===== XML-RPC MULTI-NODE STATIC STRESS TEST =====")
 
@@ -72,7 +72,7 @@ def main():
     t1 = times[1]
     for n in [2, 3]:
         speedup = t1 / times[n]
-        print(f"[Speedup] {n} node(s): {speedup:.2f}x (T1 = {t1:.2f}s, T{n} = {times[n]:.2f}s)")
+        print(f"[Speedup] {n} node(s): {speedup:.2f} (T1 = {t1:.2f}s, T{n} = {times[n]:.2f}s)")
 
 if __name__ == "__main__":
     main()

@@ -66,35 +66,47 @@ python test_rabbitmq.py
 
 ### XML-RPC
 
-python insult_service/xmlrpc_impl/xmlrpc_server3.py 8000
 python insult_service/xmlrpc_impl/xmlrpc_server3.py 8001
 python insult_service/xmlrpc_impl/xmlrpc_server3.py 8002
+python insult_service/xmlrpc_impl/xmlrpc_server3.py 8003
 
 ### Pyro
 
-python insult_service/pyro_impl/pyro_server3.py insult.service.1 9090
-python insult_service/pyro_impl/pyro_server3.py insult.service.2 9091
-python insult_service/pyro_impl/pyro_server3.py insult.service.3 9092
+python insult_service/pyro_impl/pyro_server3.py insult.service.1 9101
+python insult_service/pyro_impl/pyro_server3.py insult.service.2 9102
+python insult_service/pyro_impl/pyro_server3.py insult.service.3 9103
 
 ### Redis
 
-python insult_service/redis_impl/insult_consumer3.py insult_queue.0
-python insult_service/redis_impl/insult_consumer3.py insult_queue.1
-python insult_service/redis_impl/insult_consumer3.py insult_queue.2
+python insult_service/redis_impl/insult_consumer3.py insult_queue
 
-### RabbitMQ
 
-python insult_service/rabbitmq_impl/insult_consumer3.py insult_queue.1 insult_queue.2 insult_queue.3
+## Ejecución de tests de rendimiento single-node
 
-## Ejecución de tests de rendimiento
+Desde `stress_test/test/single_node`:
 
-Desde `stress_test/test`:
+python xmlrpc_single.py
+python pyro_single.py
+python redis_single.py
+python rabbitmq_single.py
 
-python xmlrpc_stest.py
-python pyro_stest.py
-python redis_stest.py
-python rabbitmq_stest.py
+## Ejecución de tests de rendimiento multiple-node-static
 
+Desde `stress_test/test/multiple_node_estatic`:
+
+python xmlrpc_static.py
+python pyro_static.py
+python redis_static.py
+python rabbitmq_static.py
+
+## Ejecución de tests de rendimiento multiple-node-dynamic
+
+Desde `stress_test/test/multiple_node_dynamic`:
+
+python xmlrpc_dynamic.py
+python pyro_dynamic.py
+python redis_dynamic.py
+python rabbitmq_dynamic.py
 
 Cada script mide:
 
@@ -103,6 +115,3 @@ Cada script mide:
 * Speedup comparando número de nodos
 
 
-## Resultados
-
-Los resultados se guardan y analizan mediante el script de grafico.py que genera la grafica_comparativa.png. 

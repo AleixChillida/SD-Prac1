@@ -1,55 +1,40 @@
-# redis_impl/insult_consumer3.py
+# redis_consumer_worker.py
 import redis
-import sys
 import time
+import sys
 
-class InsultConsumer:
-    def __init__(self, queue_index):
-        self.queue_name = f"insult_queue.{queue_index}"
-        self.result_key = "filtered_texts"
-        self.insults = set([
-            "Eres un bobalicón",
-            "Vaya chapucero",
-            "Pedazo de zopenco",
-            "Más tonto que un ladrillo",
-            "Tienes menos luces que un sótano"
-        ])
-        self.redis = redis.StrictRedis(
+def redis_consumer_worker():
+    try:
+        redis_client = redis.StrictRedis(
             host='localhost',
             port=6379,
             db=0,
             decode_responses=True,
-            health_check_interval=30
+            socket_timeout=10,
+            socket_keepalive=True
         )
-        self._verify_connection()
 
-    def _verify_connection(self):
-        for _ in range(3):
-            try:
-                if self.redis.ping():
-                    return
-            except redis.ConnectionError:
-                time.sleep(1)
-        print(f"[{self.queue_name}] No se pudo conectar a Redis.")
+        queue_name = "insult_queue"
+
+        print(f"[Consumer] Started consuming from '{queue_name}'")
+
+        while True:
+            # BLPOP bloquea hasta que haya un mensaje o timeout
+            result = redis_client.blpop(queue_name, timeout=5)
+            if result is None:
+                time.sleep(0.05)
+                continue
+
+            _, insult = result
+            # procesamiento simulado
+            # print(f"Consumed: {insult}")
+
+    except KeyboardInterrupt:
+        print("[Consumer] Interrupted by user")
+        sys.exit(0)
+    except Exception as e:
+        print(f"[Consumer ERROR] {str(e)}")
         sys.exit(1)
 
-    def filter(self, text):
-        return "CENSORED" if text in self.insults else text
-
-    def start_consuming(self):
-        print(f"InsultConsumer escuchando en {self.queue_name}")
-        try:
-            while True:
-                _, insult = self.redis.blpop(self.queue_name)
-                filtered = self.filter(insult)
-                self.redis.rpush(self.result_key, filtered)
-                # Opcional: comentar esto si quieres rendimiento máximo
-                # print(f"Procesado: {insult} -> {filtered}")
-        except KeyboardInterrupt:
-            print(f"\nConsumer {self.queue_name} detenido por el usuario.")
-            sys.exit(0)
-
 if __name__ == "__main__":
-    queue_index = int(sys.argv[1]) if len(sys.argv) > 1 else 0
-    consumer = InsultConsumer(queue_index)
-    consumer.start_consuming()
+    redis_consumer_worker()

@@ -5,13 +5,11 @@ import statistics
 import random
 import string
 
-# Total de mensajes a enviar
 TOTAL_MESSAGES = 1600
 
 # Intervalo de monitorización (en segundos)
 MONITOR_INTERVAL_SECONDS = 2
 
-# Lista de URLs de los servicios disponibles
 AVAILABLE_SERVICE_URLS = [
     "http://localhost:8001",
     "http://localhost:8002",

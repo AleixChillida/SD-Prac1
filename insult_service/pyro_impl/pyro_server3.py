@@ -1,4 +1,3 @@
-# pyro_server_direct.py
 import random
 import time
 import threading
@@ -42,38 +41,41 @@ class InsultService:
                     insult = self.get_random_insult()
                     self._notify_subscribers(insult)
                 time.sleep(interval)
-
         thread = threading.Thread(target=broadcast_loop, daemon=True)
         thread.start()
 
     def _notify_subscribers(self, insult):
-        broken = []
+        broken_subscribers = []
         for uri in self.subscribers:
             try:
-                sub = Pyro4.Proxy(uri)
-                sub.notify(insult)
+                subscriber = Pyro4.Proxy(uri)
+                subscriber.notify(insult)
                 print(f"Notified: {uri}")
             except Exception as e:
                 print(f"Notification failed for {uri}: {str(e)}")
-                broken.append(uri)
-        self.subscribers = [uri for uri in self.subscribers if uri not in broken]
+                broken_subscribers.append(uri)
+        self.subscribers = [uri for uri in self.subscribers if uri not in broken_subscribers]
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Uso: python pyro_server_direct.py <service_name> <port>")
-        sys.exit(1)
-
-    service_name = sys.argv[1]
-    port = int(sys.argv[2])
-
     Pyro4.config.SERIALIZER = "serpent"
     Pyro4.config.SERVERTYPE = "multiplex"
 
-    daemon = Pyro4.Daemon(port=port)
-    uri = daemon.register(InsultService(), objectId=service_name)
+    # Leer argumentos: nombre del servicio y puerto
+    service_name = sys.argv[1] if len(sys.argv) > 1 else "insult.service"
+    port = int(sys.argv[2]) if len(sys.argv) > 2 else 0  # 0 = puerto aleatorio
 
-    print(f"PyRO InsultService '{service_name}' running on port {port}")
+    daemon = Pyro4.Daemon(port=port)
+    ns = Pyro4.locateNS()
+
+    uri = daemon.register(InsultService())
+    ns.register(service_name, uri)
+
+    host, actual_port = daemon.locationStr.split(":")
+    print(f"PyRO InsultService running as '{service_name}' on host {host} port {actual_port}")
     print(f"Service URI: {uri}")
     print("Broadcasting insults every 5 seconds...")
 
-    daemon.requestLoop()
+    try:
+        daemon.requestLoop()
+    finally:
+        ns.remove(service_name)

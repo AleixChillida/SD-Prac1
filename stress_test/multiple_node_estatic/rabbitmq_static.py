@@ -4,7 +4,7 @@ import time
 import multiprocessing
 from collections import Counter
 
-# Configuración
+# Configuración base
 RABBITMQ_HOST = 'localhost'
 QUEUE_NAME = 'insult_queue'
 
@@ -17,12 +17,14 @@ INSULTS = [
     "You are a clown!", "You are a moron!"
 ]
 
+# Limpia la cola antes de iniciar el test
 def purge_queue():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
     channel.queue_purge(queue=QUEUE_NAME)
     connection.close()
 
+# Cada productor envía N mensajes a la cola RabbitMQ
 def stress_producer(proc_id, n_requests, return_dict):
     try:
         connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
@@ -39,12 +41,13 @@ def stress_producer(proc_id, n_requests, return_dict):
         print(f"[Producer {proc_id}] ERROR: {e}")
         return_dict[proc_id] = 0
 
+# Worker consumidor que simula el procesamiento remoto de los mensajes (add_insult)
 def consumer_worker():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
     channel.queue_declare(queue=QUEUE_NAME)
 
-    stored_insults = set()  # Simulación de add_insult
+    stored_insults = set()  # Evitar duplicados (simulación)
 
     def callback(ch, method, properties, body):
         insult = body.decode()
@@ -56,6 +59,7 @@ def consumer_worker():
     channel.basic_consume(queue=QUEUE_NAME, on_message_callback=callback)
     channel.start_consuming()
 
+# Devuelve el número actual de mensajes pendientes en la cola
 def get_queue_message_count():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
@@ -64,25 +68,27 @@ def get_queue_message_count():
     connection.close()
     return message_count
 
+# Espera hasta que la cola esté completamente vacía
 def wait_until_queue_empty():
     while True:
         if get_queue_message_count() == 0:
             break
         time.sleep(0.05)
 
+# Lógica del test de estrés con N consumidores
 def run_stress_test(n_nodes):
     print(f"\n--- Running stress test with {n_nodes} node(s) ---")
 
-    purge_queue()
+    purge_queue()  # Limpiar la cola
 
-    # Lanzar consumidores
+    # Lanzar consumidores (uno por nodo)
     consumers = []
     for _ in range(n_nodes):
         p = multiprocessing.Process(target=consumer_worker)
         p.start()
         consumers.append(p)
 
-    time.sleep(2)  # Esperar a que los consumidores arranquen
+    time.sleep(2)  # Espera a que los consumidores estén listos
 
     start_time = time.time()
 
@@ -104,7 +110,7 @@ def run_stress_test(n_nodes):
     total_time = end_time - start_time
     throughput = TOTAL_REQUESTS / total_time
 
-    # Detener consumidores
+    # Terminar procesos consumidores
     for c in consumers:
         c.terminate()
 
@@ -116,6 +122,7 @@ def run_stress_test(n_nodes):
 
     return total_time
 
+# Función principal: ejecuta el test con 1, 2 y 3 nodos y calcula los speedups
 def main():
     print("RABBITMQ MULTI-NODE STATIC STRESS TEST")
 
@@ -132,7 +139,7 @@ def main():
     t1 = times[1]
     for n in [2, 3]:
         speedup = t1 / times[n]
-        print(f"[Speedup] {n} node(s): {speedup:.2f}x (T1 = {t1:.2f}s, T{n} = {times[n]:.2f}s)")
+        print(f"[Speedup] {n} node(s): {speedup:.2f} (T1 = {t1:.2f}s, T{n} = {times[n]:.2f}s)")
 
 if __name__ == "__main__":
     main()

@@ -7,7 +7,7 @@ import statistics
 TOTAL_MESSAGES = 80000
 
 # Intervalo de tiempo (en segundos) para comprobar el estado de la cola
-MONITOR_INTERVAL_SECONDS = 1
+MONITOR_INTERVAL_SECONDS = 2
 
 AVAILABLE_SERVICE_NAMES = ["insult.service.1", "insult.service.2", "insult.service.3"]
 
